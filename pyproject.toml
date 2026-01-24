@@ -1,0 +1,11 @@
+[project]
+name = "trading-news-scraper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "news-please>=1.6.16",
+    "pandas>=3.0.0",
+]
