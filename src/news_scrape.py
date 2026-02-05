@@ -2,9 +2,8 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List
 
 import psycopg2
 import requests
@@ -13,6 +12,9 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import datetime
 
+from src.ai_analysis import synthesize_structured_output
+from src.models import Article
+
 
 load_dotenv()
 
@@ -20,20 +22,9 @@ NEWS_API_BASE_URL = "https://api.thenewsapi.com/v1/news/all"
 DEFAULT_CATEGORIES = "business,tech"
 DEFAULT_LIMIT = 50
 
-AZURE_OPENAI_API_VERSION_DEFAULT = "2024-02-15-preview"
+
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BACKOFF_SECONDS = 2
-
-
-@dataclass
-class Article:
-    id: str
-    title: str
-    description: str
-    url: str
-    published_at: str
-    source: str
-    raw: Dict[str, Any]
 
 
 def _build_retry_session(max_retries: int) -> requests.Session:
@@ -104,56 +95,9 @@ def fetch_news(api_key: str, categories: str, limit:int, page:int=None) -> List[
     return articles
 
 
-def _format_prompt(articles: Iterable[Article]) -> str:
-    lines = []
-    for a in articles:
-        lines.append(f"- {a.title} ({a.source})")
-    joined = "\n".join(lines)
-    return (
-        "Summarize the main market-relevant themes across these headlines. "
-        "Return 5-8 bullet points and a 1-sentence overall takeaway.\n\n"
-        f"Headlines:\n{joined}"
-    )
 
 
-def synthesize_with_azure_openai(
-    endpoint: str,
-    api_key: str,
-    deployment: str,
-    articles: Iterable[Article],
-    api_version: str = AZURE_OPENAI_API_VERSION_DEFAULT,
-) -> str:
-    if not endpoint or not api_key or not deployment:
-        raise ValueError("AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, or AZURE_OPENAI_DEPLOYMENT is not set")
 
-    url = f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions"
-    params = {"api-version": api_version}
-    headers = {
-        "Content-Type": "application/json",
-        "api-key": api_key,
-    }
-
-    prompt = _format_prompt(articles)
-
-    body = {
-        "messages": [
-            {"role": "system", "content": "You are a market news analyst."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.2,
-        "max_tokens": 600,
-    }
-
-    session = _build_retry_session(max_retries=DEFAULT_MAX_RETRIES)
-    resp = session.post(url, params=params, headers=headers, json=body, timeout=60)
-    resp.raise_for_status()
-    data = resp.json()
-
-    try:
-        return data["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, TypeError):
-        logging.exception("Unexpected Azure OpenAI response: %s", json.dumps(data)[:500])
-        raise
 
 
 def store_results(
@@ -215,7 +159,7 @@ def run_pipeline() -> Dict[str, Any]:
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     azure_key = os.getenv("AZURE_OPENAI_API_KEY")
     azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-    azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", AZURE_OPENAI_API_VERSION_DEFAULT)
+    azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 
     postgres_conn = os.getenv("POSTGRES_CONN_STR")
     init_schema = os.getenv("POSTGRES_INIT_SCHEMA", "false").lower() in {"1", "true", "yes"}
@@ -228,18 +172,18 @@ def run_pipeline() -> Dict[str, Any]:
         return {"summary": "", "articles": []}
 
     logging.info("Synthesizing %s articles", len(articles))
-    summary = synthesize_with_azure_openai(
+    analysis = synthesize_structured_output(
         endpoint=azure_endpoint,
         api_key=azure_key,
         deployment=azure_deployment,
         articles=articles,
-        api_version=azure_api_version,
+        api_version=azure_api_version or "2024-02-15-preview",
     )
 
     logging.info("Storing results in Postgres")
-    store_results(postgres_conn, summary, articles, init_schema)
+    store_results(postgres_conn, analysis.model_dump_json(indent=2), articles, init_schema)
 
-    return {"summary": summary, "articles": articles}
+    return {"summary": analysis, "articles": articles}
 
 
 if __name__ == "__main__":
