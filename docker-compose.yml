@@ -1,0 +1,45 @@
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.32.0
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0"
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite_data:/data
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: news
+      POSTGRES_USER: news
+      POSTGRES_PASSWORD: news
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  functions:
+    build: .
+    ports:
+      - "7071:7071"
+    depends_on:
+      - azurite
+      - postgres
+    environment:
+      AzureWebJobsStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1"
+      FUNCTIONS_WORKER_RUNTIME: "python"
+      NEWS_API_KEY: "${NEWS_API_KEY}"
+      NEWS_API_CATEGORIES: "${NEWS_API_CATEGORIES}"
+      NEWS_API_LIMIT: "${NEWS_API_LIMIT}"
+      AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT}"
+      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY}"
+      AZURE_OPENAI_DEPLOYMENT: "${AZURE_OPENAI_DEPLOYMENT}"
+      AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION}"
+      POSTGRES_CONN_STR: "postgresql://news:news@postgres:5432/news"
+      POSTGRES_INIT_SCHEMA: "true"
+
+volumes:
+  azurite_data:
+  pgdata:
