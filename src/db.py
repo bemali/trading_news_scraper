@@ -6,6 +6,7 @@ from typing import Iterable
 
 import psycopg2
 
+from src.ai_analysis import AnalysisOutput
 from src.models import Article
 
 
@@ -19,13 +20,16 @@ def _sleep_backoff(attempt: int, base_seconds: int) -> None:
 
 
 def _read_migration_sql() -> str:
-    migration_path = Path(__file__).resolve().parent.parent / "migrations" / "001_create_tables.sql"
-    return migration_path.read_text(encoding="utf-8")
+    migrations_dir = Path(__file__).resolve().parent.parent / "migrations"
+    parts = []
+    for path in sorted(migrations_dir.glob("*.sql")):
+        parts.append(path.read_text(encoding="utf-8").strip())
+    return "\n\n".join(p for p in parts if p)
 
 
 def store_results(
     conn_str: str,
-    summary: str,
+    analysis: AnalysisOutput,
     articles: Iterable[Article],
     init_schema: bool,
 ) -> None:
@@ -39,11 +43,100 @@ def store_results(
                     if init_schema:
                         cur.execute(_read_migration_sql())
 
+                    payload = analysis.model_dump()
+                    primary_entity = payload.get("primary_entity", {})
+                    sentiment = primary_entity.get("sentiment", {}) if isinstance(primary_entity, dict) else {}
+                    catalyst = primary_entity.get("catalyst", {}) if isinstance(primary_entity, dict) else {}
+                    macro = payload.get("macro_indicators", {})
+                    market_network = payload.get("market_network_effects", {})
+                    sub_sector_ripples = market_network.get("sub_sector_ripples", [])
+                    ai_confidence = payload.get("ai_confidence_metrics", {})
+
                     cur.execute(
-                        "INSERT INTO news_summaries(summary) VALUES (%s) RETURNING id",
-                        (summary,),
+                        """
+                        INSERT INTO news_summaries(
+                            event_id,
+                            analysis_timestamp,
+                            primary_entity_ticker,
+                            primary_entity_sentiment_score,
+                            primary_entity_sentiment_intensity,
+                            primary_entity_sentiment_consensus_divergence,
+                            primary_entity_catalyst_category,
+                            primary_entity_catalyst_type,
+                            primary_entity_catalyst_surprise_factor,
+                            primary_entity_catalyst_is_priced_in,
+                            macro_indicators_jevons_paradox_risk,
+                            macro_indicators_valuation_pressure,
+                            macro_indicators_time_horizon,
+                            mne_sub_sector_ripples,
+                            ai_confidence_metrics
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            payload.get("event_id"),
+                            payload.get("timestamp"),
+                            primary_entity.get("ticker") if isinstance(primary_entity, dict) else None,
+                            sentiment.get("score") if isinstance(sentiment, dict) else None,
+                            sentiment.get("intensity") if isinstance(sentiment, dict) else None,
+                            sentiment.get("consensus_divergence") if isinstance(sentiment, dict) else None,
+                            catalyst.get("category") if isinstance(catalyst, dict) else None,
+                            catalyst.get("type") if isinstance(catalyst, dict) else None,
+                            catalyst.get("surprise_factor") if isinstance(catalyst, dict) else None,
+                            catalyst.get("is_priced_in") if isinstance(catalyst, dict) else None,
+                            macro.get("jevons_paradox_risk") if isinstance(macro, dict) else None,
+                            macro.get("valuation_pressure") if isinstance(macro, dict) else None,
+                            macro.get("time_horizon") if isinstance(macro, dict) else None,
+                            json.dumps(sub_sector_ripples),
+                            json.dumps(ai_confidence),
+                        ),
                     )
                     summary_id = cur.fetchone()[0]
+
+                    competitors = market_network.get("competitors", []) if isinstance(market_network, dict) else []
+                    for comp in competitors:
+                        if not isinstance(comp, dict):
+                            continue
+                        cur.execute(
+                            """
+                            INSERT INTO news_competitor_impacts(
+                                summary_id,
+                                ticker,
+                                impact_direction,
+                                correlation_strength
+                            )
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (
+                                summary_id,
+                                comp.get("ticker"),
+                                comp.get("impact_direction"),
+                                comp.get("correlation_strength"),
+                            ),
+                        )
+
+                    supply_chain = market_network.get("supply_chain", []) if isinstance(market_network, dict) else []
+                    for sc in supply_chain:
+                        if not isinstance(sc, dict):
+                            continue
+                        cur.execute(
+                            """
+                            INSERT INTO news_supply_chain_impacts(
+                                summary_id,
+                                ticker,
+                                relationship,
+                                impact
+                            )
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (
+                                summary_id,
+                                sc.get("ticker"),
+                                sc.get("relationship"),
+                                sc.get("impact"),
+                            ),
+                        )
 
                     for a in articles:
                         cur.execute(
