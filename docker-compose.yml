@@ -9,22 +9,22 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news -d news"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   news_job:
     build: .
-    command: ["python", "-m", "src.news_scrape"]
+    command: ["python", "-m", "src.pipeline"]
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
-      NEWS_API_KEY: "${NEWS_API_KEY}"
-      NEWS_API_CATEGORIES: "${NEWS_API_CATEGORIES}"
-      NEWS_API_LIMIT: "${NEWS_API_LIMIT}"
-      AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT}"
-      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY}"
-      AZURE_OPENAI_DEPLOYMENT: "${AZURE_OPENAI_DEPLOYMENT}"
-      AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION}"
-      POSTGRES_CONN_STR: "postgresql://news:news@postgres:5432/news"
-      POSTGRES_INIT_SCHEMA: "true"
+      NEWS_API_KEY: "${NEWS_API_KEY:-}"
+      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}"
+      POSTGRES_CONN_STR: "${POSTGRES_CONN_STR:-postgresql://news:news@postgres:5432/news}"
     restart: "no"
 
 volumes:

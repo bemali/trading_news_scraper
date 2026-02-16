@@ -11,4 +11,4 @@ RUN pip install -r /app/requirements.txt
 
 COPY . /app
 
-CMD ["python", "-m", "src.news_scrape"]
+CMD ["python", "-m", "src.pipeline"]

@@ -5,6 +5,25 @@ Scraping app for top few stocks, macro economic news, and sector level news
 # External tools used
 - News API : https://www.thenewsapi.com/documentation
 
+# Configuration
+- Non-secret settings live in `settings.json`.
+- Secrets live in `.env` and are loaded via `python-dotenv`.
+- Environment variables override `settings.json` at runtime.
+
+Required secrets in `.env`:
+- `NEWS_API_KEY`
+- `AZURE_OPENAI_API_KEY`
+- `POSTGRES_CONN_STR`
+
+Common non-secret settings in `settings.json`:
+- `NEWS_API_BASE_URL`
+- `NEWS_API_CATEGORIES`
+- `NEWS_API_LIMIT`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_OPENAI_API_VERSION`
+- `POSTGRES_INIT_SCHEMA`
+
 # Local Testing (Docker)
 1. Start dependencies (Postgres):
 ```
