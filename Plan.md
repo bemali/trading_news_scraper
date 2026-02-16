@@ -1,4 +1,7 @@
-﻿# Plan
+# Plan
+
+## Learning Notes
+- [docker-compose-learning.md](docker-compose-learning.md) for Docker Compose command and container wiring notes.
 
 ## Goals
 - Run as an Azure Container Job.
@@ -78,3 +81,5 @@
 - Decide job schedule (manual, cron, or event-driven).
 - Validate AI analysis payload and output format.
 - Finalize database schema for analysis results.
+
+
