@@ -1,14 +1,4 @@
 services:
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:3.32.0
-    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0"
-    ports:
-      - "10000:10000"
-      - "10001:10001"
-      - "10002:10002"
-    volumes:
-      - azurite_data:/data
-
   postgres:
     image: postgres:16
     environment:
@@ -20,16 +10,12 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  functions:
+  news_job:
     build: .
-    ports:
-      - "7071:7071"
+    command: ["python", "-m", "src.news_scrape"]
     depends_on:
-      - azurite
       - postgres
     environment:
-      AzureWebJobsStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1"
-      FUNCTIONS_WORKER_RUNTIME: "python"
       NEWS_API_KEY: "${NEWS_API_KEY}"
       NEWS_API_CATEGORIES: "${NEWS_API_CATEGORIES}"
       NEWS_API_LIMIT: "${NEWS_API_LIMIT}"
@@ -39,7 +25,7 @@ services:
       AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION}"
       POSTGRES_CONN_STR: "postgresql://news:news@postgres:5432/news"
       POSTGRES_INIT_SCHEMA: "true"
+    restart: "no"
 
 volumes:
-  azurite_data:
   pgdata:

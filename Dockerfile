@@ -1,10 +1,14 @@
-FROM mcr.microsoft.com/azure-functions/python:4-python3.11
+FROM python:3.12-slim
 
-ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
-    AzureFunctionsJobHost__Logging__Console__IsEnabled=true
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
-WORKDIR /home/site/wwwroot
+WORKDIR /app
 
-COPY . /home/site/wwwroot
+COPY requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . /app
+
+CMD ["python", "-m", "src.news_scrape"]
