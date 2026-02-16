@@ -1,7 +1,6 @@
 # trading_news_scraper
 Scraping app for top few stocks, macro economic news, and sector level news
 
-
 # External tools used
 - News API : https://www.thenewsapi.com/documentation
 
@@ -24,20 +23,55 @@ Common non-secret settings in `settings.json`:
 - `AZURE_OPENAI_API_VERSION`
 - `POSTGRES_INIT_SCHEMA`
 
-# Local Testing (Docker)
-1. Start dependencies (Postgres):
-```
+# Local Deployment (Docker Compose)
+1. Set secrets in `.env`.
+2. Start Postgres:
+```bash
 docker compose up -d postgres
 ```
-2. Set secrets in `.env` (for Docker Compose) or export them in your shell.
-3. Run the job locally:
+3. Run the job:
+```bash
+docker compose run --rm news_job
 ```
+4. If you hit a `pg_hba.conf` auth error locally, reset local Postgres volume and rerun:
+```bash
+docker compose down -v
+docker compose up -d postgres
 docker compose run --rm news_job
 ```
 
 Notes:
-- Postgres is available at `postgresql://news:news@127.0.0.1:5432/news` from your host, and `postgresql://news:news@postgres:5432/news` from the `news_job` container.
+- Postgres from host machine: `postgresql://news:news@127.0.0.1:5432/news`
+- Postgres from `news_job` container: `postgresql://news:news@postgres:5432/news`
 - Tables are created on startup when `POSTGRES_INIT_SCHEMA=true`.
+
+# Viewing Results in VS Code (PostgreSQL SQL Explorer by Chris Kolkman)
+1. Install extension: `PostgreSQL SQL Explorer` (publisher: Chris Kolkman).
+2. Add a connection using:
+- Host: `127.0.0.1`
+- Port: `5432`
+- Database: `news`
+- Username: `news`
+- Password: `news`
+3. Connect and run queries, for example:
+```sql
+SELECT * FROM news_summaries ORDER BY id DESC LIMIT 20;
+SELECT * FROM news_articles ORDER BY published_at DESC NULLS LAST LIMIT 20;
+```
+
+# Stopping Local Services
+- Stop running services but keep containers/volumes:
+```bash
+docker compose stop
+```
+- Stop and remove containers/network (keep volumes/data):
+```bash
+docker compose down
+```
+- Stop and remove containers/network/volumes (deletes local Postgres data):
+```bash
+docker compose down -v
+```
 
 # Deployment Note
 - This project is intended to run as a containerized job (e.g., Azure Container Apps Jobs).
