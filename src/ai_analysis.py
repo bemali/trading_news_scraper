@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -8,9 +9,16 @@ from typing import Iterable, List
 
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from openai import APIConnectionError, AuthenticationError
 from pydantic import BaseModel, Field
 
 from src.models import Article
+
+try:
+    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+except ImportError:
+    DefaultAzureCredential = None
+    get_bearer_token_provider = None
 
 load_dotenv()
 
@@ -175,27 +183,17 @@ def synthesize_structured_output(
     articles: Iterable[Article],
     api_version: str = AZURE_OPENAI_API_VERSION_DEFAULT,
 ) -> AnalysisOutput:
-    if not endpoint or not api_key or not deployment:
-        raise ValueError("AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, or AZURE_OPENAI_DEPLOYMENT is not set")
+    if not endpoint or not deployment:
+        raise ValueError("AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_DEPLOYMENT is not set")
 
     req = _build_request(articles)
 
-    client = AzureOpenAI(
-        api_key=api_key,
-        azure_endpoint=endpoint,
+    response = _invoke_azure_openai(
+        endpoint=endpoint,
+        deployment=deployment,
         api_version=api_version,
-        max_retries=3,
-    )
-
-    response = client.chat.completions.create(
-        model=deployment,
-        messages=[
-            {"role": "system", "content": "You are a market news analyst."},
-            {"role": "user", "content": _build_user_message(req)},
-        ],
-        temperature=0.2,
-        max_tokens=900,
-        response_format={"type": "json_object"},
+        user_message=_build_user_message(req),
+        api_key=api_key,
     )
 
     content = response.choices[0].message.content or ""
@@ -207,3 +205,56 @@ def synthesize_structured_output(
         data["timestamp"] = req.timestamp
 
     return AnalysisOutput.model_validate(data)
+
+
+def _invoke_azure_openai(
+    endpoint: str,
+    deployment: str,
+    api_version: str,
+    user_message: str,
+    api_key: str,
+):
+    token_scope = "https://cognitiveservices.azure.com/.default"
+
+    if DefaultAzureCredential is not None and get_bearer_token_provider is not None:
+        try:
+            credential = DefaultAzureCredential(exclude_interactive_browser_credential=True)
+            token_provider = get_bearer_token_provider(credential, token_scope)
+            client = AzureOpenAI(
+                azure_endpoint=endpoint,
+                api_version=api_version,
+                azure_ad_token_provider=token_provider,
+                max_retries=3,
+            )
+            return _create_chat_completion(client, deployment, user_message)
+        except (AuthenticationError, APIConnectionError, RuntimeError):
+            logging.exception("Managed identity auth failed for Azure OpenAI; falling back to API key")
+        except Exception:
+            logging.exception("Unexpected failure using managed identity; falling back to API key")
+
+    if not api_key:
+        raise ValueError(
+            "Managed identity auth failed and AZURE_OPENAI_API_KEY is not set. "
+            "Set a valid key in .env for fallback."
+        )
+
+    client = AzureOpenAI(
+        api_key=api_key,
+        azure_endpoint=endpoint,
+        api_version=api_version,
+        max_retries=3,
+    )
+    return _create_chat_completion(client, deployment, user_message)
+
+
+def _create_chat_completion(client: AzureOpenAI, deployment: str, user_message: str):
+    return client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": "You are a market news analyst."},
+            {"role": "user", "content": user_message},
+        ],
+        temperature=0.2,
+        max_tokens=900,
+        response_format={"type": "json_object"},
+    )

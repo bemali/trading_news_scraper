@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +8,13 @@ from typing import Any, Dict
 from dotenv import load_dotenv
 
 from src.ai_analysis import AZURE_OPENAI_API_VERSION_DEFAULT
+
+try:
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+except ImportError:
+    DefaultAzureCredential = None
+    SecretClient = None
 
 
 NEWS_API_BASE_URL_DEFAULT = "https://api.thenewsapi.com/v1/news/all"
@@ -31,8 +39,9 @@ class Config:
 def load_config() -> Config:
     load_dotenv()
     settings = _load_settings()
+    news_api_key = _resolve_news_api_key(settings)
     return Config(
-        news_api_key=os.getenv("NEWS_API_KEY", ""),
+        news_api_key=news_api_key,
         news_api_base_url=_env_or_setting("NEWS_API_BASE_URL", settings, NEWS_API_BASE_URL_DEFAULT),
         news_api_categories=_env_or_setting("NEWS_API_CATEGORIES", settings, NEWS_API_CATEGORIES_DEFAULT),
         news_api_limit=_env_or_setting_int("NEWS_API_LIMIT", settings, NEWS_API_LIMIT_DEFAULT),
@@ -45,6 +54,28 @@ def load_config() -> Config:
         postgres_conn_str=os.getenv("POSTGRES_CONN_STR", ""),
         postgres_init_schema=_env_or_setting_bool("POSTGRES_INIT_SCHEMA", settings, False),
     )
+
+
+def _resolve_news_api_key(settings: Dict[str, Any]) -> str:
+    key_vault_url = _env_or_setting("AZURE_KEY_VAULT_URL", settings, "")
+    key_vault_secret_name = _env_or_setting("NEWS_API_KEY_SECRET_NAME", settings, "NEWS_API_KEY")
+    env_key = os.getenv("NEWS_API_KEY", "")
+
+    if key_vault_url and key_vault_secret_name:
+        if DefaultAzureCredential is None or SecretClient is None:
+            logging.warning(
+                "azure-identity/azure-keyvault-secrets is not installed; falling back to NEWS_API_KEY from environment"
+            )
+            return env_key
+
+        try:
+            credential = DefaultAzureCredential(exclude_interactive_browser_credential=True)
+            client = SecretClient(vault_url=key_vault_url, credential=credential)
+            return client.get_secret(key_vault_secret_name).value or env_key
+        except Exception:
+            logging.exception("Failed to read NEWS_API_KEY from Key Vault; falling back to environment")
+
+    return env_key
 
 
 def _load_settings() -> Dict[str, Any]:

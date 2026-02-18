@@ -9,10 +9,14 @@ Scraping app for top few stocks, macro economic news, and sector level news
 - Secrets live in `.env` and are loaded via `python-dotenv`.
 - Environment variables override `settings.json` at runtime.
 
-Required secrets in `.env`:
+Local fallback secrets in `.env`:
 - `NEWS_API_KEY`
 - `AZURE_OPENAI_API_KEY`
 - `POSTGRES_CONN_STR`
+
+Optional Azure identity settings:
+- `AZURE_KEY_VAULT_URL` (e.g. `https://<vault-name>.vault.azure.net/`)
+- `NEWS_API_KEY_SECRET_NAME` (defaults to `NEWS_API_KEY`)
 
 Common non-secret settings in `settings.json`:
 - `NEWS_API_BASE_URL`
@@ -76,6 +80,7 @@ docker compose down -v
 # Deployment Note
 - This project is intended to run as a containerized job (e.g., Azure Container Apps Jobs).
 - Configure the job schedule (cron) in your container job definition.
+- See `Deployment.md` for the production Azure reference architecture (Container Apps Job + Key Vault + PostgreSQL + Azure ML/VS Code access).
 
 # CICD
 
