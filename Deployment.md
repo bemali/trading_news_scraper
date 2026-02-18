@@ -249,6 +249,33 @@ Notes:
 3. In PostgreSQL, verify new rows in `news_summaries` and `news_articles`.
 4. Only after successful manual run, keep the schedule enabled.
 
+### 6.11 DB write-access checklist for Container Job
+Adding `POSTGRES_CONN_STR` is necessary, but write access depends on the PostgreSQL role/user inside that connection string.
+
+1. Confirm connection string user
+   - Example user in conn string: `news_user@pgflex-news-prod`
+2. Connect to PostgreSQL as admin and grant privileges:
+```sql
+GRANT CONNECT ON DATABASE news TO news_user;
+GRANT USAGE ON SCHEMA public TO news_user;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO news_user;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO news_user;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO news_user;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO news_user;
+```
+3. Validate network reachability
+   - Ensure Container Apps environment can reach PostgreSQL (private endpoint/VNet or firewall rule).
+4. Validate runtime
+   - Run job manually (`Run now`) and inspect logs for successful inserts.
+   - Confirm data exists in:
+     - `news_summaries`
+     - `news_articles`
+
 ## 7) PostgreSQL Access for Azure ML + VS Code
 
 ### Schema pattern for stable downstream use
