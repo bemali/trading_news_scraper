@@ -72,6 +72,59 @@ Set these on the Container Apps Job:
 9. Validate DB writes, then enable schedule.
 10. Provision AML compute identity and grant read role to DB.
 
+## 5.1) Build and Push Docker Image to ACR
+
+Run from project root (`d:\Code-Projects\trading_news_scraper`).
+
+### Option A: Build locally, push with Docker
+```powershell
+# Login
+az login
+
+# Set values
+$RG = "rg-news-prod"
+$ACR = "acrnewsprod"                       # registry name without .azurecr.io
+$IMAGE = "trading-news-scraper"
+$TAG = "v1"
+
+# Resolve login server and authenticate Docker to ACR
+$LOGIN_SERVER = az acr show -g $RG -n $ACR --query loginServer -o tsv
+az acr login -n $ACR
+
+# Build and push
+docker build -t "${LOGIN_SERVER}/${IMAGE}:${TAG}" .
+docker push "${LOGIN_SERVER}/${IMAGE}:${TAG}"
+```
+
+Verify pushed tag:
+```powershell
+az acr repository show-tags -n $ACR --repository $IMAGE -o table
+```
+
+### Option B: Build directly in ACR (no local Docker required)
+```powershell
+az login
+$RG = "rg-news-prod"
+$ACR = "acrnewsprod"
+$IMAGE = "trading-news-scraper"
+$TAG = "v1"
+
+az acr build -r $ACR -t "${IMAGE}:${TAG}" .
+```
+
+Verify image:
+```powershell
+az acr repository show-tags -n $ACR --repository $IMAGE -o table
+```
+
+### Updating Container Apps Job image
+- In Azure Portal:
+  1. Open `Container Apps Jobs`.
+  2. Select your job.
+  3. Open `Container` settings.
+  4. Set image to `<acr-name>.azurecr.io/trading-news-scraper:<tag>`.
+  5. Save and run a manual execution (`Run now`) to validate.
+
 ## 6) Azure Portal (UI) Creation Steps
 
 Use these steps if you want to provision everything from `portal.azure.com` instead of CLI.
