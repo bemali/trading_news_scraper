@@ -82,4 +82,30 @@
 - Validate AI analysis payload and output format.
 - Finalize database schema for analysis results.
 
+## Debug (Azure Container Jobs `ProcessExited`)
+1. **Inspect job execution logs in Portal**
+   - `Container Apps Jobs` -> job -> `Job executions` -> latest failed run -> `Logs`.
+   - Capture first Python traceback and failing module/line.
+2. **Stream logs during a manual rerun**
+   - Trigger `Run now` and watch logs live.
+   - Identify which stage fails: config load, Key Vault, OpenAI auth, DB connect, or insert.
+3. **Verify required environment variables/secrets**
+   - `AZURE_OPENAI_ENDPOINT`
+   - `AZURE_OPENAI_DEPLOYMENT`
+   - `AZURE_OPENAI_API_VERSION`
+   - `POSTGRES_CONN_STR` (secret reference)
+   - `AZURE_KEY_VAULT_URL`
+   - `NEWS_API_KEY_SECRET_NAME`
+   - Optional fallback: `AZURE_OPENAI_API_KEY`, `NEWS_API_KEY`
+4. **Validate managed identity + RBAC**
+   - Job identity has `Key Vault Secrets User` on Key Vault.
+   - Job identity has `Cognitive Services OpenAI User` on Azure OpenAI.
+5. **Validate PostgreSQL access**
+   - `POSTGRES_CONN_STR` includes `sslmode=require`.
+   - DB user in connection string has write permissions on target tables.
+   - Network path from Container Apps environment to PostgreSQL is allowed.
+6. **Reproduce locally with same image/env**
+   - `docker run --rm --env-file .env <image>:<tag>`
+   - Compare traceback with Azure logs to isolate environment-specific issues.
+
 
