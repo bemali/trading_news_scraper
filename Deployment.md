@@ -156,6 +156,30 @@ Use these steps if you want to provision everything from `portal.azure.com` inst
    - Enable Defender/monitoring options as required.
 7. Create server and note FQDN for `POSTGRES_CONN_STR`.
 
+### 6.3.1 Build `POSTGRES_CONN_STR` from PostgreSQL resource
+Use Azure Portal values from your PostgreSQL Flexible Server:
+
+1. Open your PostgreSQL server in Portal.
+2. From `Overview`, copy:
+   - Server name (example: `pgflex-news-prod`)
+   - Host/FQDN (example: `pgflex-news-prod.postgres.database.azure.com`)
+3. From your server/database setup, identify:
+   - Database name (example: `news`)
+   - Username (example: `news_user`)
+   - Password (the one you created for that user)
+4. Build connection string:
+```text
+postgresql://<username>@<server-name>:<password>@<host-fqdn>:5432/<database>?sslmode=require
+```
+Example:
+```text
+postgresql://news_user@pgflex-news-prod:YourPassword@pgflex-news-prod.postgres.database.azure.com:5432/news?sslmode=require
+```
+
+Notes:
+- Keep `sslmode=require`.
+- Store this as a secret, not as plain text in app settings.
+
 ### 6.4 Optional read replica (for AML + external app reads)
 1. Open primary PostgreSQL server.
 2. Go to `Replication` -> `Create replica`.
@@ -197,15 +221,17 @@ Use these steps if you want to provision everything from `portal.azure.com` inst
    - Use `Schedule` and set cron expression.
 5. Identity:
    - Turn on `System assigned managed identity`.
-6. Environment variables:
+6. Secrets:
+   - Add secret `postgres-conn-str` with the full PostgreSQL connection string from section `6.3.1`.
+7. Environment variables:
+   - `POSTGRES_CONN_STR` -> use `Secret reference` -> `postgres-conn-str`
    - `AZURE_OPENAI_ENDPOINT`
    - `AZURE_OPENAI_DEPLOYMENT`
    - `AZURE_OPENAI_API_VERSION`
-   - `POSTGRES_CONN_STR`
    - `AZURE_KEY_VAULT_URL`
    - `NEWS_API_KEY_SECRET_NAME` (optional if using default `NEWS_API_KEY`)
    - Optional fallback vars: `AZURE_OPENAI_API_KEY`, `NEWS_API_KEY`
-7. Create job.
+8. Create job.
 
 ### 6.9 RBAC assignments in Portal
 1. Open Key Vault -> `Access control (IAM)` -> `Add role assignment`.
