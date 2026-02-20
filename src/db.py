@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Iterable
@@ -27,18 +28,48 @@ def _read_migration_sql() -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+def _connection_args(conn_str: str):
+    if conn_str:
+        return {"dsn": conn_str.strip()}, "POSTGRES_CONN_STR"
+
+    env_map = {
+        "user": os.getenv("POSTGRES_USER", "").strip(),
+        "password": os.getenv("POSTGRES_PASSWORD", "").strip(),
+        "host": os.getenv("POSTGRES_HOST", "").strip(),
+        "database": os.getenv("POSTGRES_DB", "").strip(),
+    }
+    missing = [f"POSTGRES_{k.upper()}" for k, v in env_map.items() if not v]
+    if missing:
+        raise ValueError(
+            "Postgres configuration not set. Provide POSTGRES_CONN_STR, or set all of: "
+            "POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_DB. "
+            f"Missing: {', '.join(missing)}"
+        )
+
+    port_raw = os.getenv("POSTGRES_PORT", "5432").strip()
+    try:
+        port = int(port_raw)
+    except ValueError as exc:
+        raise ValueError(f"POSTGRES_PORT must be an integer, got: {port_raw!r}") from exc
+
+    sslmode = os.getenv("POSTGRES_SSLMODE", "require").strip() or "require"
+    env_map["port"] = port
+    env_map["sslmode"] = sslmode
+    return env_map, "POSTGRES_* fallback"
+
+
 def store_results(
     conn_str: str,
     analysis: AnalysisOutput,
     articles: Iterable[Article],
     init_schema: bool,
 ) -> None:
-    if not conn_str:
-        raise ValueError("POSTGRES_CONN_STR is not set")
+    connect_args, source = _connection_args(conn_str)
+    logging.info("Using Postgres connection source: %s", source)
 
     for attempt in range(1, DEFAULT_MAX_RETRIES + 1):
         try:
-            with psycopg2.connect(conn_str) as conn:
+            with psycopg2.connect(**connect_args) as conn:
                 with conn.cursor() as cur:
                     if init_schema:
                         cur.execute(_read_migration_sql())

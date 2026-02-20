@@ -1,11 +1,14 @@
 import logging
+import psycopg2
 
 from src.pipeline import run_pipeline
 
 
 def main() -> None:
+    
     logging.basicConfig(level=logging.INFO)
     logging.info("Starting news pipeline")
+    
     run_pipeline()
     logging.info("Finished news pipeline")
 

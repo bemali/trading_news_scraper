@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List
+from typing import Any, Iterable, List
 
 from dotenv import load_dotenv
 from openai import AzureOpenAI
@@ -13,6 +13,8 @@ from openai import APIConnectionError, AuthenticationError
 from pydantic import BaseModel, Field
 
 from src.models import Article
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 try:
     from azure.identity import DefaultAzureCredential, get_bearer_token_provider
@@ -196,8 +198,17 @@ def synthesize_structured_output(
         api_key=api_key,
     )
 
-    content = response.choices[0].message.content or ""
-    data = json.loads(content)
+    content = _extract_response_content(response)
+
+    logging.info("Raw AI response content: %s", content)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        debug_info = _response_debug_info(response)
+        raise ValueError(
+            f"Azure OpenAI returned non-JSON content. Debug info: {debug_info}. "
+            f"Raw content snippet: {content[:500]!r}"
+        ) from exc
 
     if "event_id" not in data:
         data["event_id"] = req.event_id
@@ -205,6 +216,68 @@ def synthesize_structured_output(
         data["timestamp"] = req.timestamp
 
     return AnalysisOutput.model_validate(data)
+
+
+def _extract_response_content(response: Any) -> str:
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        raise ValueError(f"Azure OpenAI response has no choices. Debug info: {_response_debug_info(response)}")
+
+    message = getattr(choices[0], "message", None)
+    if message is None:
+        raise ValueError(f"Azure OpenAI choice has no message. Debug info: {_response_debug_info(response)}")
+
+    content = getattr(message, "content", None)
+
+    if isinstance(content, str):
+        normalized = content.strip()
+        if normalized:
+            return normalized
+
+    if isinstance(content, list):
+        parts: List[str] = []
+        for part in content:
+            if isinstance(part, str):
+                if part.strip():
+                    parts.append(part.strip())
+                continue
+
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+                    continue
+
+                nested_text = part.get("content")
+                if isinstance(nested_text, str) and nested_text.strip():
+                    parts.append(nested_text.strip())
+
+        if parts:
+            return "".join(parts)
+
+    parsed = getattr(message, "parsed", None)
+    if parsed is not None:
+        if hasattr(parsed, "model_dump"):
+            return json.dumps(parsed.model_dump())
+        if isinstance(parsed, (dict, list)):
+            return json.dumps(parsed)
+
+    raise ValueError(f"Azure OpenAI returned empty content. Debug info: {_response_debug_info(response)}")
+
+
+def _response_debug_info(response: Any) -> dict:
+    choices = getattr(response, "choices", None) or []
+    first_choice = choices[0] if choices else None
+    message = getattr(first_choice, "message", None) if first_choice is not None else None
+    usage = getattr(response, "usage", None)
+
+    return {
+        "id": getattr(response, "id", None),
+        "model": getattr(response, "model", None),
+        "finish_reason": getattr(first_choice, "finish_reason", None) if first_choice is not None else None,
+        "refusal": getattr(message, "refusal", None) if message is not None else None,
+        "usage": getattr(usage, "model_dump", lambda: usage)() if usage is not None else None,
+    }
 
 
 def _invoke_azure_openai(
@@ -248,13 +321,19 @@ def _invoke_azure_openai(
 
 
 def _create_chat_completion(client: AzureOpenAI, deployment: str, user_message: str):
-    return client.chat.completions.create(
+
+    response =  client.chat.completions.create(
         model=deployment,
         messages=[
             {"role": "system", "content": "You are a market news analyst."},
             {"role": "user", "content": user_message},
         ],
         temperature=0.2,
-        max_tokens=900,
+        max_tokens=2000,
         response_format={"type": "json_object"},
     )
+
+    #debugging: log the raw response content
+    logging.debug(f"Azure OpenAI raw response: {response}")
+
+    return response

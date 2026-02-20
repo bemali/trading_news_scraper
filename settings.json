@@ -2,7 +2,7 @@
   "NEWS_API_BASE_URL": "https://api.thenewsapi.com/v1/news/all",
   "NEWS_API_CATEGORIES": "business,tech",
   "NEWS_API_LIMIT": 3,
-  "AZURE_OPENAI_ENDPOINT": "https://stocknews-ai-resource.cognitiveservices.azure.com",
+  "AZURE_OPENAI_ENDPOINT": "https://ai-news-prod.cognitiveservices.azure.com/",
   "AZURE_OPENAI_DEPLOYMENT": "gpt-4.1-mini",
   "AZURE_OPENAI_API_VERSION": "2025-01-01-preview",
   "POSTGRES_INIT_SCHEMA": true
