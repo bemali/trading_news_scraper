@@ -22,7 +22,7 @@ except ImportError:
     DefaultAzureCredential = None
     get_bearer_token_provider = None
 
-load_dotenv()
+load_dotenv(override=True)
 
 AZURE_OPENAI_API_VERSION_DEFAULT = "2024-02-15-preview"
 

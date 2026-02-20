@@ -53,7 +53,6 @@ def connect_postgres(conn_str: str):
 
     logging.info("Using Postgres connection source: POSTGRES_* fallback")
 
-    print(user, password, host)
     cnx = psycopg2.connect(user=user, password=password, host=host, port=5432, database="news", sslmode="require")
 
     return cnx

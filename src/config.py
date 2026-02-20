@@ -37,7 +37,7 @@ class Config:
 
 
 def load_config() -> Config:
-    load_dotenv()
+    load_dotenv(override=True)
     settings = _load_settings()
     news_api_key = _resolve_news_api_key(settings)
     return Config(

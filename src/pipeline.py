@@ -7,7 +7,7 @@ from src.db import store_results
 from src.news_fetcher import fetch_news
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 def run_pipeline(config: Optional[Config] = None) -> Dict[str, Any]:
