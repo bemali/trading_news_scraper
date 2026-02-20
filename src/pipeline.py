@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
-def run_pipeline(config: Optional[Config] = None) -> Dict[str, Any]:
+def run_pipeline(config: Optional[Config] = None, published_on: Optional[str] = None ) -> Dict[str, Any]:
     cfg = config or load_config()
 
     logging.info("Fetching news categories=%s limit=%s", cfg.news_api_categories, cfg.news_api_limit)
@@ -19,6 +19,7 @@ def run_pipeline(config: Optional[Config] = None) -> Dict[str, Any]:
         categories=cfg.news_api_categories,
         limit=cfg.news_api_limit,
         base_url=cfg.news_api_base_url,
+        published_on=published_on
     )
 
     if not articles:
