@@ -28,148 +28,154 @@ def _read_migration_sql() -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def _connection_args(conn_str: str):
-    if conn_str:
-        return {"dsn": conn_str.strip()}, "POSTGRES_CONN_STR"
+def connect_postgres(conn_str: str):
+    if conn_str and conn_str.strip():
+        logging.info("Using Postgres connection source: POSTGRES_CONN_STR")
+        return psycopg2.connect(conn_str.strip())
 
-    env_map = {
-        "user": os.getenv("POSTGRES_USER", "").strip(),
-        "password": os.getenv("POSTGRES_PASSWORD", "").strip(),
-        "host": os.getenv("POSTGRES_HOST", "").strip(),
-        "database": os.getenv("POSTGRES_DB", "").strip(),
-    }
-    missing = [f"POSTGRES_{k.upper()}" for k, v in env_map.items() if not v]
+    host = os.getenv("POSTGRES_HOST", "").strip()
+    user = os.getenv("POSTGRES_USER", "").strip()
+    password = os.getenv("POSTGRES_PASSWORD", "").strip()
+   
+
+    missing = []
+    if not host:
+        missing.append("POSTGRES_HOST")
+    if not user:
+        missing.append("POSTGRES_USER")
+    if not password:
+        missing.append("POSTGRES_PASSWORD")
     if missing:
         raise ValueError(
             "Postgres configuration not set. Provide POSTGRES_CONN_STR, or set all of: "
-            "POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_DB. "
-            f"Missing: {', '.join(missing)}"
+            f"POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD. Missing: {', '.join(missing)}"
         )
 
-    port_raw = os.getenv("POSTGRES_PORT", "5432").strip()
-    try:
-        port = int(port_raw)
-    except ValueError as exc:
-        raise ValueError(f"POSTGRES_PORT must be an integer, got: {port_raw!r}") from exc
+    logging.info("Using Postgres connection source: POSTGRES_* fallback")
 
-    sslmode = os.getenv("POSTGRES_SSLMODE", "require").strip() or "require"
-    env_map["port"] = port
-    env_map["sslmode"] = sslmode
-    return env_map, "POSTGRES_* fallback"
+    print(user, password, host)
+    cnx = psycopg2.connect(user=user, password=password, host=host, port=5432, database="news", sslmode="require")
+
+    return cnx
 
 
 def store_results(
     conn_str: str,
-    analysis: AnalysisOutput,
+    analyses: Iterable[AnalysisOutput],
     articles: Iterable[Article],
     init_schema: bool,
 ) -> None:
-    connect_args, source = _connection_args(conn_str)
-    logging.info("Using Postgres connection source: %s", source)
+    analysis_list = list(analyses)
+    article_list = list(articles)
+    if len(analysis_list) != len(article_list):
+        raise ValueError(
+            "Analyses/articles length mismatch: "
+            f"{len(analysis_list)} analyses for {len(article_list)} articles"
+        )
 
     for attempt in range(1, DEFAULT_MAX_RETRIES + 1):
         try:
-            with psycopg2.connect(**connect_args) as conn:
+            with connect_postgres(conn_str) as conn:
                 with conn.cursor() as cur:
                     if init_schema:
                         cur.execute(_read_migration_sql())
 
-                    payload = analysis.model_dump()
-                    primary_entity = payload.get("primary_entity", {})
-                    sentiment = primary_entity.get("sentiment", {}) if isinstance(primary_entity, dict) else {}
-                    catalyst = primary_entity.get("catalyst", {}) if isinstance(primary_entity, dict) else {}
-                    macro = payload.get("macro_indicators", {})
-                    market_network = payload.get("market_network_effects", {})
-                    sub_sector_ripples = market_network.get("sub_sector_ripples", [])
-                    ai_confidence = payload.get("ai_confidence_metrics", {})
+                    for analysis, article in zip(analysis_list, article_list):
+                        payload = analysis.model_dump()
+                        primary_entity = payload.get("primary_entity", {})
+                        sentiment = primary_entity.get("sentiment", {}) if isinstance(primary_entity, dict) else {}
+                        catalyst = primary_entity.get("catalyst", {}) if isinstance(primary_entity, dict) else {}
+                        macro = payload.get("macro_indicators", {})
+                        market_network = payload.get("market_network_effects", {})
+                        sub_sector_ripples = market_network.get("sub_sector_ripples", [])
+                        ai_confidence = payload.get("ai_confidence_metrics", {})
 
-                    cur.execute(
-                        """
-                        INSERT INTO news_summaries(
-                            event_id,
-                            analysis_timestamp,
-                            primary_entity_ticker,
-                            primary_entity_sentiment_score,
-                            primary_entity_sentiment_intensity,
-                            primary_entity_sentiment_consensus_divergence,
-                            primary_entity_catalyst_category,
-                            primary_entity_catalyst_type,
-                            primary_entity_catalyst_surprise_factor,
-                            primary_entity_catalyst_is_priced_in,
-                            macro_indicators_jevons_paradox_risk,
-                            macro_indicators_valuation_pressure,
-                            macro_indicators_time_horizon,
-                            mne_sub_sector_ripples,
-                            ai_confidence_metrics
-                        )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id
-                        """,
-                        (
-                            payload.get("event_id"),
-                            payload.get("timestamp"),
-                            primary_entity.get("ticker") if isinstance(primary_entity, dict) else None,
-                            sentiment.get("score") if isinstance(sentiment, dict) else None,
-                            sentiment.get("intensity") if isinstance(sentiment, dict) else None,
-                            sentiment.get("consensus_divergence") if isinstance(sentiment, dict) else None,
-                            catalyst.get("category") if isinstance(catalyst, dict) else None,
-                            catalyst.get("type") if isinstance(catalyst, dict) else None,
-                            catalyst.get("surprise_factor") if isinstance(catalyst, dict) else None,
-                            catalyst.get("is_priced_in") if isinstance(catalyst, dict) else None,
-                            macro.get("jevons_paradox_risk") if isinstance(macro, dict) else None,
-                            macro.get("valuation_pressure") if isinstance(macro, dict) else None,
-                            macro.get("time_horizon") if isinstance(macro, dict) else None,
-                            json.dumps(sub_sector_ripples),
-                            json.dumps(ai_confidence),
-                        ),
-                    )
-                    summary_id = cur.fetchone()[0]
-
-                    competitors = market_network.get("competitors", []) if isinstance(market_network, dict) else []
-                    for comp in competitors:
-                        if not isinstance(comp, dict):
-                            continue
                         cur.execute(
                             """
-                            INSERT INTO news_competitor_impacts(
-                                summary_id,
-                                ticker,
-                                impact_direction,
-                                correlation_strength
+                            INSERT INTO news_summaries(
+                                event_id,
+                                analysis_timestamp,
+                                primary_entity_ticker,
+                                primary_entity_sentiment_score,
+                                primary_entity_sentiment_intensity,
+                                primary_entity_sentiment_consensus_divergence,
+                                primary_entity_catalyst_category,
+                                primary_entity_catalyst_type,
+                                primary_entity_catalyst_surprise_factor,
+                                primary_entity_catalyst_is_priced_in,
+                                macro_indicators_jevons_paradox_risk,
+                                macro_indicators_valuation_pressure,
+                                macro_indicators_time_horizon,
+                                mne_sub_sector_ripples,
+                                ai_confidence_metrics
                             )
-                            VALUES (%s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            RETURNING id
                             """,
                             (
-                                summary_id,
-                                comp.get("ticker"),
-                                comp.get("impact_direction"),
-                                comp.get("correlation_strength"),
+                                payload.get("event_id"),
+                                payload.get("timestamp"),
+                                primary_entity.get("ticker") if isinstance(primary_entity, dict) else None,
+                                sentiment.get("score") if isinstance(sentiment, dict) else None,
+                                sentiment.get("intensity") if isinstance(sentiment, dict) else None,
+                                sentiment.get("consensus_divergence") if isinstance(sentiment, dict) else None,
+                                catalyst.get("category") if isinstance(catalyst, dict) else None,
+                                catalyst.get("type") if isinstance(catalyst, dict) else None,
+                                catalyst.get("surprise_factor") if isinstance(catalyst, dict) else None,
+                                catalyst.get("is_priced_in") if isinstance(catalyst, dict) else None,
+                                macro.get("jevons_paradox_risk") if isinstance(macro, dict) else None,
+                                macro.get("valuation_pressure") if isinstance(macro, dict) else None,
+                                macro.get("time_horizon") if isinstance(macro, dict) else None,
+                                json.dumps(sub_sector_ripples),
+                                json.dumps(ai_confidence),
                             ),
                         )
+                        summary_id = cur.fetchone()[0]
 
-                    supply_chain = market_network.get("supply_chain", []) if isinstance(market_network, dict) else []
-                    for sc in supply_chain:
-                        if not isinstance(sc, dict):
-                            continue
-                        cur.execute(
-                            """
-                            INSERT INTO news_supply_chain_impacts(
-                                summary_id,
-                                ticker,
-                                relationship,
-                                impact
+                        competitors = market_network.get("competitors", []) if isinstance(market_network, dict) else []
+                        for comp in competitors:
+                            if not isinstance(comp, dict):
+                                continue
+                            cur.execute(
+                                """
+                                INSERT INTO news_competitor_impacts(
+                                    summary_id,
+                                    ticker,
+                                    impact_direction,
+                                    correlation_strength
+                                )
+                                VALUES (%s, %s, %s, %s)
+                                """,
+                                (
+                                    summary_id,
+                                    comp.get("ticker"),
+                                    comp.get("impact_direction"),
+                                    comp.get("correlation_strength"),
+                                ),
                             )
-                            VALUES (%s, %s, %s, %s)
-                            """,
-                            (
-                                summary_id,
-                                sc.get("ticker"),
-                                sc.get("relationship"),
-                                sc.get("impact"),
-                            ),
-                        )
 
-                    for a in articles:
+                        supply_chain = market_network.get("supply_chain", []) if isinstance(market_network, dict) else []
+                        for sc in supply_chain:
+                            if not isinstance(sc, dict):
+                                continue
+                            cur.execute(
+                                """
+                                INSERT INTO news_supply_chain_impacts(
+                                    summary_id,
+                                    ticker,
+                                    relationship,
+                                    impact
+                                )
+                                VALUES (%s, %s, %s, %s)
+                                """,
+                                (
+                                    summary_id,
+                                    sc.get("ticker"),
+                                    sc.get("relationship"),
+                                    sc.get("impact"),
+                                ),
+                            )
+
                         cur.execute(
                             """
                             INSERT INTO news_articles(id, summary_id, title, url, source, published_at, raw)
@@ -177,13 +183,13 @@ def store_results(
                             ON CONFLICT (id) DO NOTHING
                             """,
                             (
-                                a.id,
+                                article.id,
                                 summary_id,
-                                a.title,
-                                a.url,
-                                a.source,
-                                a.published_at or None,
-                                json.dumps(a.raw),
+                                article.title,
+                                article.url,
+                                article.source,
+                                article.published_at or None,
+                                json.dumps(article.raw),
                             ),
                         )
             break

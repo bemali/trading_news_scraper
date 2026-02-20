@@ -178,17 +178,14 @@ def _build_user_message(req: AnalysisRequest) -> str:
     )
 
 
-def synthesize_structured_output(
+def _analyze_single_article(
     endpoint: str,
     api_key: str,
     deployment: str,
-    articles: Iterable[Article],
-    api_version: str = AZURE_OPENAI_API_VERSION_DEFAULT,
+    article: Article,
+    api_version: str,
 ) -> AnalysisOutput:
-    if not endpoint or not deployment:
-        raise ValueError("AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_DEPLOYMENT is not set")
-
-    req = _build_request(articles)
+    req = _build_request([article])
 
     response = _invoke_azure_openai(
         endpoint=endpoint,
@@ -200,14 +197,14 @@ def synthesize_structured_output(
 
     content = _extract_response_content(response)
 
-    logging.info("Raw AI response content: %s", content)
+    logging.info("Raw AI response content for article %s: %s", article.id, content)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
         debug_info = _response_debug_info(response)
         raise ValueError(
-            f"Azure OpenAI returned non-JSON content. Debug info: {debug_info}. "
-            f"Raw content snippet: {content[:500]!r}"
+            f"Azure OpenAI returned non-JSON content for article {article.id}. "
+            f"Debug info: {debug_info}. Raw content snippet: {content[:500]!r}"
         ) from exc
 
     if "event_id" not in data:
@@ -216,6 +213,32 @@ def synthesize_structured_output(
         data["timestamp"] = req.timestamp
 
     return AnalysisOutput.model_validate(data)
+
+
+def synthesize_structured_output(
+    endpoint: str,
+    api_key: str,
+    deployment: str,
+    articles: Iterable[Article],
+    api_version: str = AZURE_OPENAI_API_VERSION_DEFAULT,
+) -> List[AnalysisOutput]:
+    if not endpoint or not deployment:
+        raise ValueError("AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_DEPLOYMENT is not set")
+
+    article_list = list(articles)
+    outputs: List[AnalysisOutput] = []
+    for article in article_list:
+        outputs.append(
+            _analyze_single_article(
+                endpoint=endpoint,
+                api_key=api_key,
+                deployment=deployment,
+                article=article,
+                api_version=api_version,
+            )
+        )
+
+    return outputs
 
 
 def _extract_response_content(response: Any) -> str:

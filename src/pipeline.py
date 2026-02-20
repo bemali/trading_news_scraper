@@ -5,6 +5,9 @@ from src.ai_analysis import synthesize_structured_output
 from src.config import Config, load_config
 from src.db import store_results
 from src.news_fetcher import fetch_news
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def run_pipeline(config: Optional[Config] = None) -> Dict[str, Any]:
@@ -23,7 +26,7 @@ def run_pipeline(config: Optional[Config] = None) -> Dict[str, Any]:
         return {"summary": "", "articles": []}
 
     logging.info("Synthesizing %s articles", len(articles))
-    analysis = synthesize_structured_output(
+    analyses = synthesize_structured_output(
         endpoint=cfg.azure_openai_endpoint,
         api_key=cfg.azure_openai_api_key,
         deployment=cfg.azure_openai_deployment,
@@ -32,9 +35,9 @@ def run_pipeline(config: Optional[Config] = None) -> Dict[str, Any]:
     )
 
     logging.info("Storing results in Postgres")
-    store_results(cfg.postgres_conn_str, analysis, articles, cfg.postgres_init_schema)
+    store_results(cfg.postgres_conn_str, analyses, articles, cfg.postgres_init_schema)
 
-    return {"summary": analysis, "articles": articles}
+    return {"summary": analyses, "articles": articles}
 
 
 if __name__ == "__main__":
