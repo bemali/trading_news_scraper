@@ -98,7 +98,11 @@ $LOGIN_SERVER = az acr show -g $RG -n $ACR --query loginServer -o tsv
 az acr login -n $ACR
 
 # Build and push
+#### standard
 docker build -t "${LOGIN_SERVER}/${IMAGE}:${TAG}" .
+#### with cache cleared
+docker build --no-cache -t "${LOGIN_SERVER}/${IMAGE}:${TAG}" .
+#### push
 docker push "${LOGIN_SERVER}/${IMAGE}:${TAG}"
 ```
 
