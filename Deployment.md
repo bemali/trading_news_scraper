@@ -46,16 +46,22 @@ This guide targets your current architecture: containerized scraper job + Postgr
 Set these on the Container Apps Job:
 
 - Required:
+
+  
+  - `POSTGRES_USER` : as a secret
+  - `POSTGRES_PASSWORD`: as a secret
+  - `NEWS_API_KEY_SECRET_NAME` = NEWS-API-KEY (relevant name in the key vault)
+
+- Optional (If not set, will be loaded with settings)
   - `AZURE_OPENAI_ENDPOINT`
   - `AZURE_OPENAI_DEPLOYMENT`
   - `AZURE_OPENAI_API_VERSION`
-  - `POSTGRES_CONN_STR`
-- Optional (Key Vault path for news key):
-  - `AZURE_KEY_VAULT_URL`
-  - `NEWS_API_KEY_SECRET_NAME`
+  - `POSTGRES_HOST`
+
 - Fallback-only:
-  - `AZURE_OPENAI_API_KEY`
-  - `NEWS_API_KEY`
+  - `POSTGRES_CONN_STR`: as a secret
+  - `AZURE_OPENAI_API_KEY`: as a secret
+  - `NEWS_API_KEY`: as a secret
 
 ## 5) Deployment Sequence
 
@@ -83,9 +89,9 @@ az login
 
 # Set values
 $RG = "rg-news-prod"
-$ACR = "acrnewsprod"                       # registry name without .azurecr.io
+$ACR = "acrnewsrod"                       # registry name without .azurecr.io
 $IMAGE = "trading-news-scraper"
-$TAG = "v1"
+$TAG = "v1" # increment if a new image is being pushed after fixing the code
 
 # Resolve login server and authenticate Docker to ACR
 $LOGIN_SERVER = az acr show -g $RG -n $ACR --query loginServer -o tsv

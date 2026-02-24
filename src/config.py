@@ -66,7 +66,7 @@ def load_config() -> Config:
 
 def _resolve_news_api_key(settings: Dict[str, Any]) -> str:
     key_vault_url = _env_or_setting("AZURE_KEY_VAULT_URL", settings, "")
-    key_vault_secret_name = _env_or_setting("NEWS_API_KEY_SECRET_NAME", settings, "NEWS_API_KEY")
+    key_vault_secret_name = _env_or_setting("NEWS_API_KEY_SECRET_NAME", settings, "NEWS-API-KEY")
     env_key = os.getenv("NEWS_API_KEY", "")
 
     if key_vault_url and key_vault_secret_name:

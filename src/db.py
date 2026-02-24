@@ -39,7 +39,11 @@ def connect_postgres(config:Config):
 
     if conn_str and conn_str.strip():
         logging.info("Using Postgres connection source: POSTGRES_CONN_STR")
-        return psycopg2.connect(conn_str.strip())
+        try: 
+            cnx = psycopg2.connect(conn_str.strip())
+        except psycopg2.Error as e:
+            logging.info("Failed to connect to Postgres using POSTGRES_CONN_STR: %s", e)
+            pass
     
 
 
