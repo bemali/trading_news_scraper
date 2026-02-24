@@ -27,7 +27,7 @@ def run_pipeline(config: Optional[Config] = None, published_on: Optional[str] = 
         return {"summary": "", "articles": []}
 
     logging.info("Synthesizing %s articles", len(articles))
-    analyses = synthesize_structured_output(
+    modified_articles, analyses = synthesize_structured_output(
         endpoint=cfg.azure_openai_endpoint,
         api_key=cfg.azure_openai_api_key,
         deployment=cfg.azure_openai_deployment,
@@ -36,9 +36,9 @@ def run_pipeline(config: Optional[Config] = None, published_on: Optional[str] = 
     )
 
     logging.info("Storing results in Postgres")
-    store_results(cfg, analyses, articles, cfg.postgres_init_schema)
+    store_results(cfg, analyses, modified_articles, cfg.postgres_init_schema)
 
-    return {"summary": analyses, "articles": articles}
+    return {"summary": analyses, "articles": modified_articles}
 
 
 if __name__ == "__main__":

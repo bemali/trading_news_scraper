@@ -14,7 +14,7 @@ def main() -> None:
 
     
     interval = datetime.timedelta(days=1)
-    total_days = datetime.timedelta(days=3)
+    total_days = datetime.timedelta(days=2)
     start_period = end_date - total_days
 
     

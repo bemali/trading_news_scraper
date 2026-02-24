@@ -229,17 +229,22 @@ def synthesize_structured_output(
     article_list = list(articles)
     outputs: List[AnalysisOutput] = []
     for article in article_list:
-        outputs.append(
-            _analyze_single_article(
-                endpoint=endpoint,
-                api_key=api_key,
-                deployment=deployment,
-                article=article,
-                api_version=api_version,
+        try:
+            outputs.append(
+                _analyze_single_article(
+                    endpoint=endpoint,
+                    api_key=api_key,
+                    deployment=deployment,
+                    article=article,
+                    api_version=api_version,
+                )
             )
-        )
+        except Exception:
+            article_list.remove(article)
+            logging.exception("Failed to analyze article %s: %s", article.id, article.title)
+            outputs.append(None)
 
-    return outputs
+    return article_list, outputs
 
 
 def _extract_response_content(response: Any) -> str:
