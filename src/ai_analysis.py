@@ -171,6 +171,7 @@ def _build_user_message(req: AnalysisRequest) -> str:
     return (
         f"{req.base_prompt}\n\n"
         "Output must be valid JSON and match this schema exactly (no extra keys):\n"
+        "No null values - use 'none' strings or zeros as appropriate. If uncertain about a value, make your best guess based on the headlines.\n"
         f"{schema}\n\n"
         f"Use event_id: {req.event_id}\n"
         f"Use timestamp: {req.timestamp}\n\n"

@@ -36,7 +36,7 @@ def run_pipeline(config: Optional[Config] = None, published_on: Optional[str] = 
     )
 
     logging.info("Storing results in Postgres")
-    store_results(cfg.postgres_conn_str, analyses, articles, cfg.postgres_init_schema)
+    store_results(cfg, analyses, articles, cfg.postgres_init_schema)
 
     return {"summary": analyses, "articles": articles}
 

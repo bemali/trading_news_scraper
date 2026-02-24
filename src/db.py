@@ -4,6 +4,7 @@ import os
 import time
 from pathlib import Path
 from typing import Iterable
+from src.config import Config, load_config
 
 import psycopg2
 
@@ -28,14 +29,23 @@ def _read_migration_sql() -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def connect_postgres(conn_str: str):
+def connect_postgres(config:Config):
+    cfg = config or load_config()
+
+    try:    
+        conn_str = cfg.postgres_conn_str
+    except:
+        conn_str = None
+
     if conn_str and conn_str.strip():
         logging.info("Using Postgres connection source: POSTGRES_CONN_STR")
         return psycopg2.connect(conn_str.strip())
+    
 
-    host = os.getenv("POSTGRES_HOST", "").strip()
-    user = os.getenv("POSTGRES_USER", "").strip()
-    password = os.getenv("POSTGRES_PASSWORD", "").strip()
+
+    host = cfg.postgres_host.strip()
+    user = cfg.postgres_user.strip()
+    password = cfg.postgres_password.strip()
    
 
     missing = []
@@ -59,7 +69,7 @@ def connect_postgres(conn_str: str):
 
 
 def store_results(
-    conn_str: str,
+    config:Config,
     analyses: Iterable[AnalysisOutput],
     articles: Iterable[Article],
     init_schema: bool,
@@ -74,7 +84,7 @@ def store_results(
 
     for attempt in range(1, DEFAULT_MAX_RETRIES + 1):
         try:
-            with connect_postgres(conn_str) as conn:
+            with connect_postgres(config) as conn:
                 with conn.cursor() as cur:
                     if init_schema:
                         cur.execute(_read_migration_sql())

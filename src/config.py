@@ -7,11 +7,12 @@ from typing import Any, Dict
 
 from dotenv import load_dotenv
 
-from src.ai_analysis import AZURE_OPENAI_API_VERSION_DEFAULT
+
 
 try:
     from azure.identity import DefaultAzureCredential
-    from azure.keyvault.secrets import SecretClient
+    from azure.keyvault.secrets import SecretClient    
+
 except ImportError:
     DefaultAzureCredential = None
     SecretClient = None
@@ -34,12 +35,16 @@ class Config:
     azure_openai_api_version: str
     postgres_conn_str: str
     postgres_init_schema: bool
+    postgres_host: str
+    postgres_user: str
+    postgres_password: str
 
 
 def load_config() -> Config:
     load_dotenv(override=True)
     settings = _load_settings()
     news_api_key = _resolve_news_api_key(settings)
+    print(f"Using NEWS_API_KEY: {'***' if news_api_key else '(not set)'}")
     return Config(
         news_api_key=news_api_key,
         news_api_base_url=_env_or_setting("NEWS_API_BASE_URL", settings, NEWS_API_BASE_URL_DEFAULT),
@@ -49,10 +54,13 @@ def load_config() -> Config:
         azure_openai_api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
         azure_openai_deployment=_env_or_setting("AZURE_OPENAI_DEPLOYMENT", settings, ""),
         azure_openai_api_version=_env_or_setting(
-            "AZURE_OPENAI_API_VERSION", settings, AZURE_OPENAI_API_VERSION_DEFAULT
+            "AZURE_OPENAI_API_VERSION", settings, "2025-01-01-preview"
         ),
         postgres_conn_str=os.getenv("POSTGRES_CONN_STR", ""),
         postgres_init_schema=_env_or_setting_bool("POSTGRES_INIT_SCHEMA", settings, False),
+        postgres_host=_env_or_setting("POSTGRES_HOST", settings, ""),
+        postgres_user=os.getenv("POSTGRES_USER", ""),
+        postgres_password=os.getenv("POSTGRES_PASSWORD",""),
     )
 
 
@@ -114,3 +122,8 @@ def _env_or_setting_bool(key: str, settings: Dict[str, Any], default: bool) -> b
     if isinstance(val, str):
         return val.lower() in {"1", "true", "yes"}
     return bool(val)
+
+
+if __name__ == "__main__":
+    config = load_config()
+    print(config)

@@ -13,8 +13,8 @@ def main() -> None:
     end_date = datetime.datetime.now(datetime.timezone.utc)
 
     
-    interval = datetime.timedelta(days=7)
-    total_days = datetime.timedelta(days=730)
+    interval = datetime.timedelta(days=1)
+    total_days = datetime.timedelta(days=3)
     start_period = end_date - total_days
 
     
